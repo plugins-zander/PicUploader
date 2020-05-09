@@ -1,7 +1,7 @@
 PicUploader
 ===============
 ![PicUploader-logo.png](https://img.xiebruce.top/2018/09/19/781e669d020efbde43dc952eb802293b.png)
-
+[![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy)
 **PicUploader** 是一个用php编写的图床工具，它能帮助你快速上传你的图片到云图床，并自动返回Markdown格式链接到剪贴板。配置完成后，要获取一个可用于markdown的图片外链只需要：
 
 - **方式一：** 右击电脑本地任意格式文件→点击`你的自定义上传菜单`→系统通知文件上传成功→到Markdown编辑器中粘贴！
