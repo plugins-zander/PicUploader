@@ -1,7 +1,7 @@
 {
-  "name": "img",
+  "name": "OneManager",
   "description": "Deploy OneManager to heroku",
-  "website": "https://github.com/plugins-zander/host-img-PicUploader",
-  "repository": "https://github.com/plugins-zander/host-img-PicUploader",
+  "website": "https://github.com/qkqpttgf/OneManager-php",
+  "repository": "https://github.com/qkqpttgf/OneManager-php",
   "success_url": "/"
 }

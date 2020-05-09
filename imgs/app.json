@@ -1,0 +1,7 @@
+{
+  "name": "img",
+  "description": "Deploy OneManager to heroku",
+  "website": "https://github.com/plugins-zander/host-img-PicUploader",
+  "repository": "https://github.com/plugins-zander/host-img-PicUploader",
+  "success_url": "/"
+}
