@@ -9,9 +9,6 @@
 namespace  settings;
 
 use uploader\Common;
-use uploader\UploadImgur;
-use zelda\Pagination;
-use GuzzleHttp\Client;
 
 class HistoryController extends Controller {
 	
@@ -21,22 +18,55 @@ class HistoryController extends Controller {
 	 * @param $url
 	 * @param $size
 	 * @param $mime
+	 * @param $md5
+	 * @param $uploadServer
 	 *
 	 * @return int
 	 */
-	public function Add($filename, $url, $size, $mime){
-		$pattern = '/^http[s]?.*?/';
-		if(!preg_match($pattern, $url)){
-			return false;
-		}
-		$model = new HistoryModel();
-		return $model->createOne([
-			'filename' => $filename,
-			'url' => $url,
-			'size' => $size,
-			'mime' => $mime,
-		]);
+	public function Add($filename, $url, $size, $mime, $md5, $uploadServer){
+        $model = new HistoryModel();
+        try {
+            $pattern = '/^http[s]?.*?/';
+            if(!preg_match($pattern, $url)){
+                return false;
+            }
+            
+            $affectedRow = $model->createOne([
+                'filename' => $filename,
+                'url' => $url,
+                'size' => $size,
+                'mime' => $mime,
+                'md5' => $md5,
+                'uploadServer' => $uploadServer,
+            ]);
+        }catch (\PDOException $exception){
+            $affectedRow = 0;
+            $msg = $exception->getMessage();
+            $this->AddMissingColumn($model, $msg);
+        }
+        return $affectedRow;
 	}
+    
+    /**
+     * AddMissingColumn
+     * @param $model
+     * @param $msg
+     */
+    public function AddMissingColumn($model, $msg){
+        $matches = [];
+        preg_match("/1 table history has no column named (.*$)|Unknown column '(.*?)'/", $msg, $matches);
+        $missColumn = isset($matches[2]) ? $matches[2] : (isset($matches[1]) ? $matches[1] : '');
+        if($missColumn){
+            $attr = [
+                'md5' => ['comment' => 'md5值', 'columnType'=>'VARCHAR(32) NOT NULL DEFAULT ""'],
+                'upload_server' => ['comment' => '图床', 'columnType'=>'VARCHAR(16) NOT NULL DEFAULT ""'],
+            ];
+            $bool = $model->addColumn($missColumn, $attr[$missColumn]['columnType'], $attr[$missColumn]['comment']);
+            if($missColumn=='md5' || $missColumn=='upload_server'){
+                $model->addIndex('inx_'.$missColumn, $missColumn);
+            }
+        }
+    }
 	
 	/**
 	 * 获取分页
@@ -49,7 +79,8 @@ class HistoryController extends Controller {
 	public function getPagination($totalCount, $curPage, $pageSize){
 		// var_dump($curPage);exit;
 		$pageCount = ceil($totalCount / $pageSize);
-	    $pagination = '<span class="">共'.$pageCount.'页</span>';
+        $pagination = '<span class="">共'.$totalCount.'条, </span>';
+        $pagination .= '<span class="">共'.$pageCount.'页 </span>';
 		$pagination .= '<span class="button' . ($curPage==1 ? ' cur' : '') . '" data-page="1">首页</span>';
 		$pagination .= '<span class="button' . ($curPage==1 ? ' forbidden' : '') . '" data-page="'. ($curPage==1 ? 1 : $curPage-1) .'">上一页</span>';
 		$pagination .= '<span class="button' . ($curPage==$pageCount ? ' forbidden' : '') . '" data-page="' . ($curPage==$pageCount ? $pageCount : $curPage+1) . '">下一页</span>';
@@ -124,17 +155,46 @@ class HistoryController extends Controller {
 		}
 		return json_encode($ret, JSON_UNESCAPED_UNICODE);
 	}
-	
-	public function deleteFromImgur(){
+    
+    /**
+     * 删除Imgur或sm.ms的图片
+     * @return false|string
+     * @throws \Exception
+     */
+    public function deleteImage(){
 		$hash = isset($_REQUEST['hash']) ? $_REQUEST['hash'] : '';
+		$engine = isset($_REQUEST['engine']) ? $_REQUEST['engine'] : '';
 		$config = call_user_func([(new SettingController()), 'getMergeSettings']);
 		$constructorParams = [
 			'config' => $config,
 			'argv' => '',
-			'uploadServer' => 'imgur'
+			'uploadServer' => strtolower($engine),
 		];
-		
-		$res = (new UploadImgur($constructorParams))->deleteImage($hash);
+        $uploadServer = 'uploader\\Upload'.ucfirst($engine);
+		$res = (new $uploadServer($constructorParams))->deleteImage($hash);
 		return json_encode($res);
 	}
+    
+    /**
+     * getByConditions
+     * @param $conditionArr
+     *
+     * @return bool|mixed
+     */
+    public function getByConditions($conditionArr){
+        $model = new HistoryModel();
+        try {
+            $where = '';
+            foreach($conditionArr as $key=>&$val){
+                $where .= "`".$key."`='".$val."' AND ";
+            }
+            $where .= '1=1';
+            $res = $model->findByConditions($where);
+        }catch (\PDOException $exception){
+            $res = false;
+            $msg = $exception->getMessage();
+            $this->AddMissingColumn($model, $msg);
+        }
+        return $res;
+    }
 }

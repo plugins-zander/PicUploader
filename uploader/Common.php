@@ -175,10 +175,11 @@ class Common {
     /**
      * 根据文件路径获取原文件名
      * @param $filePath
+     * @param $includeExt
      *
      * @return mixed
      */
-    public function getOriginFileName($filePath){
+    public function getOriginFileName($filePath, $includeExt=true){
     	// windows
     	if(strpos($filePath, '\\')){
 		    $arr = explode('\\', $filePath);
@@ -191,7 +192,10 @@ class Common {
     		$filename = substr($filename, 1);
 	    }
     	$fileExt = $this->getFileExt($filePath);
-	    return str_ireplace('.'.$fileExt, '', $filename);
+    	if(!$includeExt && $fileExt){
+            $filename = str_ireplace('.'.$fileExt, '', $filename);
+        }
+	    return $filename;
     }
 
     /**
@@ -229,11 +233,15 @@ class Common {
 	/**
 	 * 获取指定长度的随机字符串，字符串中包含数字及大小写字母
 	 * @param int $length
+	 * @param bool $onlyNum
 	 *
 	 * @return bool|string
 	 */
-	public function getRandomString($length = 16) {
+	public function getRandomString($length = 16, $onlyNum=false) {
 		$pool = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+		if($onlyNum){
+		    $pool = '0123456789';
+        }
 		return substr(str_shuffle(str_repeat($pool, $length)), 0, $length);
 	}
 	
@@ -270,11 +278,12 @@ class Common {
     /**
      * Format the Link
      * @param        $url
+     * @param string $mime
      * @param string $filename
      *
      * @return string
      */
-    public function formatLink($url, $filename='', $mime){
+    public function formatLink($url, $mime, $filename=''){
     	//非图片
     	if(strpos($mime, 'image')===false){
     	    switch($mime){
@@ -434,9 +443,10 @@ class Common {
 	public function copyPlainTextToClipboard($content){
 		//Mac和Win都自带，Linux(桌面系统)一般需要需要自己安装xclip(如Ubuntu: apt install xclip)
 	    $clipboard = PHP_OS=='Darwin' ? 'pbcopy' : (PHP_OS=='WINNT' ? 'clip' : 'xclip -selection clipboard');
-	    //$content不要加引号，因为引号会被输出的，因为这句命令已经是shell执行，而不是php
-		//echo也不是php命令，而是shell命令，win/mac/linux都有echo这个命令的
-	    $command = "echo {$content} | {$clipboard}";
+		//echo不是php命令，而是shell命令，win/mac/linux都有echo这个命令的
+        //在Mint(基于Ubuntu)系统中，发现在终端执行命令的方式调用上传，如果有使用shell_exec()则会导致终端不退出
+        //但在Mac和Win就没这个问题
+	    $command = "echo '{$content}' | {$clipboard}";
 		return shell_exec($command);
     }
 	
@@ -448,10 +458,12 @@ class Common {
 		$configFileName = PHP_OS=='WINNT' ? 'config_win.json' : 'config.json';
 		$config = json_decode(file_get_contents(APP_PATH.'/accessorys/PicUploaderHelper/'.$configFileName), true);
 		$imgType = strtolower($config['img_type']) == 'jpeg' ? 'jpg' : 'png';
+        $tmpDir = APP_PATH.'/.tmp';
+        !is_dir($tmpDir) && @mkdir($tmpDir, 0777 ,true);
+        $imgPath = $tmpDir . '/image.'.$imgType;
 		switch (PHP_OS){
 			case 'Darwin':
 				//图片地址不在$output中，而是在$imgPath里
-				$imgPath = APP_PATH.'/.tmp/image.'.$imgType;
 				// Mac上要求安装pngpaste(虽然叫pngpaste，但它支持输入PNG, PDF, GIF, TIF, JPEG，输出PNG, GIF, JPEG, TIFF.)
 				$command = '/usr/local/bin/pngpaste ' . $imgPath;
 				//pngpaste保存图片成功是没有任何输出的(Linux/Unit系统惯例)
@@ -467,11 +479,12 @@ class Common {
 			case 'Linux':
 			default:
 				//Linux桌面系统要求安装xclip(如Ubuntu: apt install xclip)
-				$imgPath = APP_PATH.'/.tmp/image.'.$imgType;
-				$mime = $imgType == 'jpg' ? 'image/jpeg' : 'image/png';
+				$mime = ($imgType == 'jpg') ? 'image/jpeg' : 'image/png';
 				$xclipPath = '/usr/bin/xclip';
+				//Linux中用于判断剪贴板中内容的类型的命令
 				$clipboardContentTypeCmd = $xclipPath . ' -selection clipboard -t TARGETS -o';
 				$contentTypes = shell_exec($clipboardContentTypeCmd);
+				//如果剪贴板中的内容是图片，则用以下命令把剪贴板中的图片输出到$imgPath指定的图片文件中
 				if(strpos($contentTypes, $mime) !== false){
 					$command = $xclipPath . ' -selection clipboard -t ' . $mime . ' -o > ' . $imgPath;
 					//图片地址不在$output中，而是在$imgPath里

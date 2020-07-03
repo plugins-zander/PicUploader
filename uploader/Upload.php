@@ -34,6 +34,25 @@ class Upload extends Common {
         
         static::$config['storageType'] = isset(static::$config['storageType']) ? static::$config['storageType'] : 'Smms';
     }
+    
+    /**
+     * getUrlFromHistory
+     * @param $md5
+     * @param $uploadServer
+     *
+     * @return mixed|string
+     */
+    public function getUrlFromHistory($md5, $uploadServer){
+        $res = (new HistoryController())->getByConditions([
+            'md5'=>$md5,
+            'upload_server'=>$uploadServer,
+        ]);
+        $url = '';
+        if(isset($res['url'])){
+            $url = $res['url'];
+        }
+        return $url;
+    }
 	
 	/**
 	 * Get public link
@@ -57,6 +76,7 @@ class Upload extends Common {
         }
 
 		$links = '';
+        $notFormatLink = '';
 		foreach($this->argv as $filePath){
 			$fileSize = filesize($filePath);
 			//为防止不小心上传了过大的文件，大于100M的文件一律跳过不上传
@@ -69,7 +89,6 @@ class Upload extends Common {
 			
 			$mimeType = $this->getMimeType($filePath);
 			$fileExt = $this->getFileExt($filePath);
-			//不带后缀名的原始文件名
 			$originFilename = $this->getOriginFileName($filePath);
 			
 			$fileNameFormat = isset(static::$config['fileNameFormat']) ? trim(static::$config['fileNameFormat']) : '';
@@ -87,6 +106,8 @@ class Upload extends Common {
 					$fileNameFormat = preg_replace($pattern2, $randomStr, $fileNameFormat);
 				}
 				//除了random规则，其它都可以用strtr()函数转换
+                $lastDotPos = strrpos($originFilename, '.');
+                $originFilenameWithoutExt = $lastDotPos ? substr($originFilename, 0, $lastDotPos) : $originFilename;
 				$newFileName = strtr($fileNameFormat, [
 					'{Y}' => date('Y'),
 					'{m}' => date('m'),
@@ -94,7 +115,7 @@ class Upload extends Common {
 					'{H}' => date('H'),
 					'{i}' => date('i'),
 					'{s}' => date('s'),
-					'{origin}' => $originFilename,
+					'{origin}' => $originFilenameWithoutExt,
 					'{timestamp}' => time(),
 				]);
 			}else{
@@ -140,78 +161,98 @@ class Upload extends Common {
 			$link = '';
 			foreach($uploadServers as $uploadServer){
 				$uploadServer = strtolower(trim($uploadServer));
-				if(!in_array($uploadServer, $storageTypes)){
-					$errMsg = "Cannot find storage type `{$uploadServer}` in config file, please check the config file and try again.\n";
-					$this->writeLog($errMsg, 'StorageTypeError');
-					continue;
-				}
-				
-				$cloudType = '';
-				if(isset(static::$config['storageTypes'][$uploadServer]['type'])){
-					$cloudType = static::$config['storageTypes'][$uploadServer]['type'];
-				}
-				
-				$args = [$key, $uploadFilePath];
-				if(in_array($uploadServer, ['imgur', 'smms', 'weibo', 'cloudinary'])){
-					$args[] = $originFilename;
-				}
-				$constructorParams = [
-					'config' => static::$config,
-					'argv' => $this->argv,
-					'uploadServer' => $uploadServer,
-				];
-				
-				if($cloudType){
-					$className = strtolower($cloudType);
-				}else{
-					$className = $uploadServer;
-				}
-				//new 变量类名不会带上命名空间，所以自己把命名空间加上
-				$className = __NAMESPACE__.'\\Upload'.ucfirst($className);
-				
-				//这两种调用方法作用一样，但call_user_func_array可根据条件改变参数个数，不用再写一次upload调用，缺点是无法用IDE跟踪函数
-				// $retArr = (new $className(static::$config, $this->argv))->upload($key, $uploadFilePath);
-				$retArr = call_user_func_array([(new $className($constructorParams)), 'upload'], $args);
-				//处理使用默认域名
-				// $this->reverseProxyDomain && $retArr['domain'] = $this->reverseProxyDomain;
-				if($this->reverseProxyDomain && !in_array($uploadServer, ['weibo'])){
-					$link = $this->reverseProxyDomain . '/' . $retArr['key'];
-				}else{
-					$link = $retArr['domain'] . '/' . $retArr['key'];
-				}
-				
-				// 如果数据库连接正常，则保存上传记录到数据库
-				if((new DbModel())->connection){
-					$url = $retArr['domain'] . '/' . $retArr['key'];
-					if($uploadServer == 'smms'){
-						$url = $url . ',' . $retArr['delLink'];
-					}
-					if($uploadServer == 'imgur'){
-						$url = $url . ';' . $retArr['delHash'];
-					}
-					$size = filesize($uploadFilePath);
-					// $size = is_numeric($size) ? $size : 0;
-					$filename = $fileExt ? $originFilename . '.' . $fileExt : $originFilename;
-					(new HistoryController)->Add($filename, $url, $size, $mimeType);
-				}
-				
-				if(!$params['doNotFormat']){
+				$md5 = md5(file_get_contents($uploadFilePath));
+                $link = $this->getUrlFromHistory($md5, $uploadServer);
+                $historyExists = false;
+                $retArr = [
+                    'code' => 0
+                ];
+				if(!$link){
+                    $historyExists = true;
+                    if(!in_array($uploadServer, $storageTypes)){
+                        $errMsg = "Cannot find storage type `{$uploadServer}` in config file, please check the config file and try again.\n";
+                        $this->writeLog($errMsg, 'StorageTypeError');
+                        continue;
+                    }
+                    
+                    $cloudType = '';
+                    if(isset(static::$config['storageTypes'][$uploadServer]['type'])){
+                        $cloudType = static::$config['storageTypes'][$uploadServer]['type'];
+                    }
+                    
+                    $args = [$key, $uploadFilePath];
+                    $needOriginalNameServer = ['imgur', 'smms', 'weibo', 'cloudinary', 'googledrive', 'tusu', 'flickr'];
+                    if(in_array($uploadServer, $needOriginalNameServer)){
+                        $args[] = $originFilename;
+                    }
+                    $constructorParams = [
+                        'config' => static::$config,
+                        'argv' => $this->argv,
+                        'uploadServer' => $uploadServer,
+                    ];
+                    
+                    if($cloudType){
+                        $className = strtolower($cloudType);
+                    }else{
+                        $className = $uploadServer;
+                    }
+                    //new 变量类名不会带上命名空间，所以自己把命名空间加上
+                    $className = __NAMESPACE__.'\\Upload'.ucfirst($className);
+                    
+                    //这两种调用方法作用一样，但call_user_func_array可根据条件改变参数个数，不用再写一次upload调用，缺点是无法用IDE跟踪函数
+                    // $retArr = (new $className(static::$config, $this->argv))->upload($key, $uploadFilePath);
+                    $retArr = call_user_func_array([(new $className($constructorParams)), 'upload'], $args);
+                    
+                    if($retArr['code']===0){
+                        //处理使用默认域名
+                        // $this->reverseProxyDomain && $retArr['domain'] = $this->reverseProxyDomain;
+                        if($this->reverseProxyDomain && !in_array($uploadServer, ['weibo'])){
+                            $link = $this->reverseProxyDomain . '/' . $retArr['key'];
+                        }else{
+                            $link = $retArr['domain'] . '/' . $retArr['key'];
+                        }
+                    }else{
+                        $link = $retArr['msg'];
+                    }
+                    
+                    // 如果数据库连接正常，则保存上传记录到数据库
+                    if((new DbModel())->connection && $retArr['code']===0){
+                        $url = $retArr['domain'] . '/' . $retArr['key'];
+                        if($uploadServer == 'smms'){
+                            $url = $url . ',' . $retArr['delLink'];
+                        }
+                        if($uploadServer == 'imgur'){
+                            $url = $url . ';' . $retArr['delHash'];
+                        }
+                        $size = filesize($uploadFilePath);
+                        // $size = is_numeric($size) ? $size : 0;
+                        // $filename = $fileExt ? $originFilename . '.' . $fileExt : $originFilename;
+                        (new HistoryController)->Add($originFilename, $url, $size, $mimeType, $md5, $uploadServer);
+                    }
+                }
+                
+                $params['isWeb'] && $notFormatLink = $link;
+				if(!$params['doNotFormat'] && $retArr['code']===0){
 					//按配置文件指定的格式，格式化链接
-					$link = $this->formatLink($link, $originFilename, $mimeType);
+					$link = $this->formatLink($link, $mimeType, $originFilename);
 				}
 				
-				$log = $link;
-				if($uploadServer == 'smms'){
-					$log = $link."\nDelete Link: ".$retArr['delLink'];
-				}
-				if($uploadServer == 'imgur'){
-					$log = $link."\nDelete Hash: ".$retArr['delHash'];
-				}
-				
-				//记录上传日志
-				$datetime = date('Y-m-d H:i:s');
-				$content = "Picture uploaded to {$uploadServer} at {$datetime} => \n{$log}\n\n---\n";
-				$this->writeLog($content);
+				if(!$historyExists){
+                    $log = $link;
+                    if($retArr['code']===0){
+                        if($uploadServer == 'smms'){
+                            $log = $link."\nDelete Link: ".$retArr['delLink'];
+                        }
+                        if($uploadServer == 'imgur'){
+                            $log = $link."\nDelete Hash: ".$retArr['delHash'];
+                        }
+                    }
+                    
+                    //记录上传日志
+                    $datetime = date('Y-m-d H:i:s');
+                    $content = "File uploaded to {$uploadServer} at {$datetime} => \n{$log}\n\n---\n";
+                    $this->writeLog($content);
+                }
 			}
 			//对于从剪贴板粘贴的或接口上传的，删除源文件(这个源文件实质上是上传后的那个文件，它在.tmp目录里，并不是用户电脑上的源文件)
 			$params['deleteOriginalFile'] && @unlink($filePath);
@@ -220,9 +261,20 @@ class Upload extends Common {
 			//服务器把这个域名代理到真正的域名
 			$links .= $link . "\n";
 		}
+		//去掉最后一个换行，否则会影响复制到剪贴板(如，在win中：echo xxxx | clip，如果xxxx后面有换行
+        //，即把"| clip"换到第二行，这就变成不是一句命令而是两句，导致无法把内容输出到剪贴板)
+        $links = rtrim($links);
 		// $str = var_export(isset($tmpImgPath), true);
 		// file_put_contents('/Users/bruce/Downloads/tmp-debug.txt', "{$str}--{$tmpImgPath}\n----------------------------------------\n\n", FILE_APPEND);
 		isset($tmpImgPath) && @unlink($tmpImgPath);
+		//当isWeb为true时，肯定是单文件上传(即使是多文件但也是循环按单文件处理)，
+        //web那边需要同时用到格式化过的和未格式化过的链接
+		if($params['isWeb']){
+		    return [
+                'formatLink' => $links,
+                'notFormatLink' => $notFormatLink,
+            ];
+        }
 		return $links;
     }
 }

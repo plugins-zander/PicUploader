@@ -20,12 +20,13 @@ class DbModel {
 	{
 		$database = (new SettingController())->getDatabaseConfig();
 		if(!isset($database['dsn']) || !$database['dsn']){
-			return $this->connection;
+			$database['dsn'] = 'sqlite:PicUploader.db';
 		}
 
 		try{
 			if(strpos($database['dsn'], 'sqlite') === 0){
 				$file = str_replace('sqlite:', '', $database['dsn']);
+				//如果没有指定数据库文件路径则用默认路径
 				strpos($file, '/')===false && $file = APP_PATH . '/db/'.$file;
 				if(!is_file($file)){
 					$dbDir = dirname($file);
@@ -39,16 +40,28 @@ class DbModel {
 					$this->connection = new PDO('sqlite:'.$file);
 				}
 			}else{
+			    //dsn标准写法：
+                //1. mysql => "mysql:host=<DATABASE_IP OR DATABASE_DOMAIN>:<PORT>;dbname=<DATABASE_NAME>"
+                //例如：mysql:host=127.0.0.1:3306;dbname=history
+                //2. sqlite => "sqlite:/path/to/<FILENAME>.db"
+                //例如：sqlite:/path/to/PicUploader.db
 				$this->connection = new PDO($database['dsn'], $database['username'], $database['password']);
 				$res = $this->connection->query("SHOW TABLES LIKE 'history'");
-				$row = $res->fetch();
-				if(!$row || !isset($row[0]) || $row[0]!='history'){
-					$historyTableSqlFile = APP_PATH . '/settings/PicUploader.sql';
-					if(is_file($historyTableSqlFile)){
-						$historyTable = file_get_contents($historyTableSqlFile);
-						$this->connection->exec($historyTable);
-					}
-				}
+                $createTable = true;
+				if($res!==false){
+                    $row = $res->fetch();
+                    if($row && isset($row[0]) && $row[0]=='history'){
+                        $createTable = false;
+                    }
+                }
+				
+				if($createTable){
+                    $historyTableSqlFile = APP_PATH . '/settings/PicUploader-mysql.sql';
+                    if(is_file($historyTableSqlFile)){
+                        $historyTable = file_get_contents($historyTableSqlFile);
+                        $this->connection->exec($historyTable);
+                    }
+                }
 			}
 		}catch (PDOException $e){
 			(new Common())->writeLog($e->getMessage(), 'error_log');
@@ -78,7 +91,10 @@ class DbModel {
 	 */
 	public function query($sql){
 		$res = $this->connection->query($sql);
-		return $res->fetch(PDO::FETCH_ASSOC);
+		if($res){
+            $res = $res->fetch(PDO::FETCH_ASSOC);
+        }
+		return $res;
 	}
 
 	/**

@@ -11,21 +11,21 @@ namespace uploader;
 use Exception;
 use GuzzleHttp\Client as GuzzleClient;
 
+/*
+ * 文档： https://www.dropbox.com/developers/documentation/http/documentation
+ */
 class UploadDropbox extends Upload{
-	
+    
+    const BASE_URL = 'https://dropbox.com';
+    const AUTH_TOKEN_URL = 'https://api.dropboxapi.com/oauth2/token';
+    const UPLOAD_URL = 'https://content.dropboxapi.com/2/files/upload';
+    // const CREATE_SHARED_LINK = 'https://api.dropboxapi.com/2/sharing/create_shared_link';
+    const CREATE_SHARED_LINK = 'https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings';
+    
 	public $appKey;
 	public $appSecret;
 	public $redirectUri;
-	public $baseUrl = 'https://dropbox.com';
-	const AUTH_TOKEN_URL = 'https://api.dropboxapi.com/oauth2/token';
-	const UPLOAD_URL = 'https://content.dropboxapi.com/2/files/upload';
-	const CREATE_SHARED_LINK = 'https://api.dropboxapi.com/2/sharing/create_shared_link';
-	const CURL_OPTION = [
-		//如果使用了cacert.pem，貌似隔一段时间更新一次，所以还是不使用它了
-		//CURLOPT_CAINFO => APP_PATH.'/static/cacert.pem',
-		CURLOPT_SSL_VERIFYPEER => false,
-		CURLOPT_SSL_VERIFYHOST => false,
-	];
+	public $baseUrl = '';
 	public $domain;
 	public $proxy;
 	public $directory;
@@ -44,7 +44,7 @@ class UploadDropbox extends Upload{
 	 */
 	public function __construct($params)
 	{
-		$ServerConfig = $params['config']['storageTypes'][$params['uploadServer']];
+		$ServerConfig = $params['config']['storageTypes'][strtolower($params['uploadServer'])];
 		$this->uploadServer = ucfirst($params['uploadServer']);
 		$this->appKey = $ServerConfig['appKey'];
 		$this->appSecret = $ServerConfig['appSecret'];
@@ -75,6 +75,8 @@ class UploadDropbox extends Upload{
 	
 	/**
 	 * 返回授权url
+     * 文档： https://www.dropbox.com/developers/documentation/http/documentation
+     * 注意，文档右侧的目录导航里没有oauth2.0相关的，直接从文档最开始往下看或者搜索"Authorization"就行
 	 * @return string
 	 */
 	public function getAuthorizationUrl(){
@@ -90,7 +92,7 @@ class UploadDropbox extends Upload{
 		];
 		
 		$queryParams = http_build_query($params);
-        $authUrl = $this->baseUrl . '/oauth2/authorize?' . $queryParams;
+        $authUrl = static::BASE_URL . '/oauth2/authorize?' . $queryParams;
 		return $authUrl;
 	}
 	
@@ -116,6 +118,9 @@ class UploadDropbox extends Upload{
 	
 	/**
 	 * 获取AccessToken
+     * 文档： https://www.dropbox.com/developers/documentation/http/documentation
+     * 注意: 文档右侧的目录导航里没有oauth2.0相关的，直接从文档最开始往下看或者搜索"/oauth2/token"往下几个就是
+     * 注意: dropbox是没有refresh_token的说法的，所以它的access_token是永久有效的(除非重新授权)
 	 * @param        $code
 	 * @param string $grant_type
 	 *
@@ -136,11 +141,11 @@ class UploadDropbox extends Upload{
 		$uri = static::AUTH_TOKEN_URL . '?' . $queryString;
 		
 		//实例化GuzzleHttp
-		$client = $this->newGuzzleClient($this->baseUrl);
+		$client = $this->newGuzzleClient(static::BASE_URL);
 		//upload file to onedrive root path
-		$data = [];
-		$data['curl'] = static::CURL_OPTION;
-		$response = $client->request('POST', $uri, $data);
+		$response = $client->request('POST', $uri, [
+		    'verify' => false,
+        ]);
 		
 		$string = $response->getBody()->getContents();
 		if($response->getReasonPhrase() != 'OK'){
@@ -177,6 +182,8 @@ class UploadDropbox extends Upload{
 	
 	/**
 	 * Create a share link
+     * 文档: https://www.dropbox.com/developers/documentation/http/documentation#sharing-create_shared_link_with_settings
+     * 注意，create_shared_link已经弃用了，现在要用create_shared_link_with_settings
 	 * @param $path
 	 *
 	 * @return array
@@ -188,14 +195,18 @@ class UploadDropbox extends Upload{
 		$client = $this->newGuzzleClient();
 		
 		$postData = [
-			'curl' => static::CURL_OPTION,
+			'verify' => false,
 			'headers' => [
 				'Authorization' => 'Bearer ' . $accessToken,
 				'Content-Type'  => 'application/json',
 			],
 			'json' => [
 				'path' => $path,
-				'short_url' => false,
+				'settings' => [
+				    'requested_visibility' => 'public',
+				    'audience' => 'public',
+				    'access' => 'viewer',
+                ],
 			],
 		];
 		$response = $client->request('POST', static::CREATE_SHARED_LINK, $postData);
@@ -232,20 +243,10 @@ class UploadDropbox extends Upload{
 	public function upload($key, $uploadFilePath){
 		try {
 			$accessToken = $this->getAccessToken();
-			
-			/*$guzzleClient = new GuzzleClient([
-				'timeout'  => 30.0,
-				'proxy' => 'http://127.0.0.1:1087',
-			]);
-			$client = new Client($accessToken, $guzzleClient);
-			$res = $client->upload('test.jpg', fopen($uploadFilePath, 'rb'));
-			$client->createSharedLinkWithSettings();
-			var_dump($res);*/
-			
 			if($this->directory){
 				$key = $this->directory . '/' . $key;
 			}
-			//dropbox要求前面有斜杠开头
+			//dropbox要求key的前面必须斜杠开头
 			$key = '/' . $key;
 			
 			$fp = fopen($uploadFilePath, 'rb');
@@ -256,7 +257,7 @@ class UploadDropbox extends Upload{
 			
 			$client = $this->newGuzzleClient();
 			$response = $client->request('POST', static::UPLOAD_URL, [
-				'curl' => static::CURL_OPTION,
+				'verify' => false,
 				'headers' => [
 					'Authorization' => 'Bearer ' . $accessToken,
 					'Content-Type'  => 'application/octet-stream',

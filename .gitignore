@@ -11,7 +11,8 @@
 accessorys/PicUploaderHelper/PicUploaderHelper.log
 accessorys/PicUploaderHelper/PicUploaderHelper-start.sh
 
-/auth/
+/auth/FlickrRedirect.php
+
 /uploader/token/
 /config/config-local.php
 /config/.settings
@@ -24,7 +25,4 @@ accessorys/PicUploaderHelper/PicUploaderHelper-start.sh
 /uploader/UploadCoroutine.php
 /uploader/UploadCtyun.php
 /uploader/UploadXrcloud.php
-/uploader/UploadGoogledrive.php
-/uploader/UploadOnedrive.php
-
-/test.php
+/uploader/UploadFlickr.php

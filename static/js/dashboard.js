@@ -39,7 +39,7 @@ function uploadFiles(files){
 	firstUnuploaded.find('.image-mask').html('上传中...');
 	
 	var formData = new FormData();
-	formData.append('mweb', file);
+	formData.append('web', file);
 	
 	$.ajax({
 		type: 'post',
@@ -66,22 +66,10 @@ function uploadFiles(files){
 			if(response.code=='success'){
 				//移除未上传类名及遮罩
 				firstUnuploaded.removeClass('un-uploaded').find('.image-mask').remove();
-				
-				let exclamatoryMark = '!';
-				if(isImg){
-					//如果不是图片而是其它图片，则不使用感叹号(图片的markdown前面要感叹号，而没有感叹号就是普通链接)
-					exclamatoryMark = '';
-				}
 				//在上传图片那一行显示返回的markdown链接
-				$('.click-upload-image-parent .show-returned-url').append(exclamatoryMark+'['+data.filename+']('+data.url+')\n');
-				
-				//复制按钮
-				var exclamationMark = '!';
-				if(file.type.substr(0, 5) !== 'image'){
-					exclamationMark = '';
-				}
+				$('.click-upload-image-parent .show-returned-url').append(data.url + '\n');
 				let copyBtn =
-					`<div class="copy-image-url" data-clipboard-text='${exclamationMark}[${data.filename}](${data.url})' alt="Copy to clipboard" title="Copy to clipboard">
+					`<div class="copy-image-url" data-clipboard-text='${data.url}' alt="Copy to clipboard" title="Copy to clipboard">
 					<img width="16" src="/static/images/clippy.svg">
 					<div class="copied">Copied!</div>
 				</div>`;
@@ -93,15 +81,14 @@ function uploadFiles(files){
 				// 很多浏览器不允许用js去click这个按钮来把内容复制到剪贴板，
 				// 必须用真正的鼠标来点击才能复制，所以这句在大多数浏览器下其实并不管用
 				firstUnuploaded.find('.copy-image-url').click();
-				
 				if(isImg){
-					//真正的图片要等加载之后，再替换过去(因为这个图片是有水印的，而一开始显示的是直接从文件读取base64的，并没有水印)
+					//真正的图片要等加载之后，再替换过去(因为这个图片是有水印的，而一开始显示的是直接从真正的源文件里读取的base64，并没有水印)
 					var imgObj = new Image();
-					imgObj.src = data.url;
+					imgObj.src = data.notFormatUrl;
 					imgObj.onload = function (e){
 						//图片加载完成后，替换原先显示的图
 						firstUnuploaded.find('.drop-area-image').attr({
-							"src": data.url,
+							"src": data.notFormatUrl,
 							"alt": data.filename,
 							"title": data.filename,
 						});
@@ -113,7 +100,7 @@ function uploadFiles(files){
 			}
 		},
 		error: function (error){
-			console.log(error);
+			console.log(error.responseText);
 		}
 	});
 }
@@ -175,55 +162,69 @@ function showLocalImages(files){
 
 /**
  * 获取当前tab值(如果没有自动添加)
- * @param tabParamName
- * @param initTab
- * @param max
+ * @param param
+ * @param defaultValue
  * @returns {number|string}
  */
-function getCurTab(tabParamName, initTab, max){
-	if(tabParamName==undefined){
-		tabParamName = 'tab';
-	}
-	if(initTab==undefined){
-		initTab = 0;
-	}
-	
-	//如果链接没有tab，则给链接添加tab，且默认值为0（即第一个tab）
-	let curTab = initTab;
-	let cur_url = window.location.href.toString();
-	//检测url中是否有：?tab=数字 或 &tab=数字
-	// let reg = /[?&]tab=(\d)+/gi;
-	let reg = new RegExp('[?&]' + tabParamName + '=(\\d+)', 'gi');
-	let match = reg.exec(cur_url);
-	// console.log(match);
-	//如果没有tab=数字，我们要添加一个上去(用pushState())
-	if(match==null || match==undefined || match[1]==null || match[1]==undefined){
-		//window.location.search用于获取url中的参数部分，如果原来有参数，那么就用&连接，如果没有，那就用?连接
-		let seperator = window.location.search.length ? '&' : '?';
-		//seperator + tabName + '=' + curTab 举例：?tab=1 , &tab=1
-		cur_url = cur_url.replace(cur_url,cur_url + seperator + tabParamName + '=' + curTab);
-		window.history.replaceState('','',cur_url);
+function getParam(param, defaultValue){
+	let queryStr = window.location.search.toString();
+	let reg = new RegExp('.*'+param+'=([^&\n?]*)&*.*', 'gi');
+	let ret = reg.exec(queryStr);
+	let value = defaultValue;
+	if(ret!=null && ret[1]!=undefined){
+		value = ret[1];
 	}else{
-		//如果有，则直接获取数字是多少
-		curTab = match[1];
+		setParam(param, defaultValue);
 	}
-	if(max!=undefined){
-		curTab = curTab > max ? max : curTab;
-	}
-	return curTab;
+	return value;
 }
 
 /**
  * 设置当前tab值
- * @param tabParamName
- * @param curTab
+ * @param param
+ * @param value
  */
-function setTab(tabParamName, curTab){
-	let cur_url = window.location.href.toString();
-	//window.location.search用于获取url中的参数部分，如果原来有参数，那么就用&连接，如果没有，那就用?连接
-	let reg = new RegExp('([?|&]'  + tabParamName + '=)\\d+', 'gi');
-	cur_url = cur_url.replace(reg, '$1'+curTab);
-	window.history.replaceState('', '', cur_url);
+function setParam(param, value){
+	if(typeof(value)=='string'){
+		value = value.trim();
+		value = encodeURIComponent(value);
+	}
+	//window.location.href可以获取到整个完整的url(包括"#"号锚点)
+	let curUrl = window.location.href.toString();
+	//window.location.search用于获取url中的"?a=1&b=2&b=3……",但不包括#号及其后面的, substr(1)是去掉"?"号
+	let queryStr = window.location.search.toString();
+	
+	//为了后面统一组装字符串
+	let arr = [curUrl,''];
+	//这样做是为了处理带#号的锚点
+	let queryStrEmpty = true;
+	if(queryStr!==''){
+		queryStrEmpty = false;
+		arr = curUrl.split(queryStr);
+	}else if(curUrl.indexOf('#') > -1){
+		arr = curUrl.split('#');
+	}
+	let reg = new RegExp('(.*)('+param+'=)([^&\n?]*)(&*)(.*)', 'gi');
+	let ret = reg.exec(queryStr);
+	//如果没有匹配到就添加该参数
+	if(ret==null){
+		let separater = '?';
+		//如果第一个字符是"?"号，则把分隔符换成"&"
+		if(queryStr.indexOf('?')===0){
+			separater = '&';
+		}
+		queryStr = queryStr + separater + param + '=' + value;
+	}else{
+		//如果匹配到了就替换该参数的值
+		queryStr = queryStr.replace(reg, '$1' + '$2' +value + '$4' + '$5' );
+	}
+	if(queryStrEmpty && curUrl.indexOf('#') > -1){
+		//url中有#号(#号后面的肯定是锚点名，所以#号肯定在最后，把queryStr插入到#号之前，再把之前根据#号分割成的数组连起来)
+		curUrl = arr.join(queryStr+'#');
+	}else{
+		curUrl = arr.join(queryStr);
+	}
+	window.history.replaceState('', '', curUrl);
 }
 
 //jQuery入口函数
@@ -234,8 +235,9 @@ $(document).ready(function (){
 	let curTab = 0;
 	let curTab2 = 0;
 	setTimeout(function (){
-		curTab = getCurTab(tabName);
-		curTab2 = getCurTab(tabName2);
+		curTab = getParam(tabName, 0);
+		curTab2 = getParam(tabName2, 0);
+		//2就是第三个，因为第一个是0，而第三个是选存储云
 		if(curTab == 2){
 			$('.sub-left-bar .list .cloud').eq(curTab2).click();
 		}else{
@@ -276,9 +278,9 @@ $(document).ready(function (){
 		showSaveTips(defaultSaveTips, 2000);
 		
 		//设置tab值(用于设置云图标处于选中状态)
-		setTab(tabName, 2);
+		setParam(tabName, 2);
 		//设置tab2值(用于设置是哪个云)
-		setTab(tabName2, $(this).index());
+		setParam(tabName2, $(this).index());
 		
 		var $this = $(this);
 		var key = $(this).data('key');
@@ -304,14 +306,14 @@ $(document).ready(function (){
 						value = '';
 					}
 					var authentication = '';
-					if(key == 'onedrive' || key == 'googledrive' || key == 'dropbox'){
+					let oauthServers = ['onedrive', 'googledrive', 'dropbox', 'imgur', 'azure', 'flickr', ];
+					if(oauthServers.findIndex((element)=>(element==key)) > -1){
 						let oauth = response.oauth;
 						if(oauth!=undefined){
 							if(oauth.authorized === false){
 								authentication = '<input id="authorize" class="authorize" type="button" value="点击获取'+key+'授权">';
-								// authentication = '<a href="#" id="authorize">获取onedrive授权</a>';
 							}else{
-								authentication = '<input class="authorize authorized" type="button" value="已获取'+key+'授权">';
+								authentication = '<input class="authorize authorized" type="button" value="已获取'+key+'授权"><input id="authorize" class="authorize" type="button" value="重新获取'+key+'授权"><br>(注意:在已获取授权的情况下，点击"重新获取授权"，除了GoogleDrive则会重新显示同意页面，其它的，你的感觉就是刷新了一下，但其实已经重新获取了，重新获取的原因：当上传一直失败时，可以尝试重新获取一下授权，另外如果你更换了账号，也需要重新获取！)';
 							}
 						}
 					}
@@ -347,12 +349,12 @@ $(document).ready(function (){
 		saveSettings('set-storage-params');
 	});
 	
-	//点击获取onedrive/googledrive/dropgox等授权
+	//点击获取onedrive/googledrive/dropgox/imgur等授权
 	$('.cloud-setting').on('click', '#authorize', function (){
-		let key = $(this).next().val();
+		let key = $(this).parent().find('input[name="key"]').val();
 		$.ajax({
 			type: 'post',
-			url: './settings/dispatch.php?func=setRedirectUri',
+			url: './settings/dispatch.php?func=getAuthUrl',
 			data: {
 				key: key,
 				uri: window.location.href,
@@ -544,7 +546,7 @@ $(document).ready(function (){
 	//点击左侧栏的上传图片选项
 	$('.left-bar .upload-image').on('click', function (){
 		//设置tab值
-		setTab(tabName, 0);
+		setParam(tabName, 0);
 		$('.left-bar .icons').removeClass('active');
 		$('.sub-left-bar .list li').removeClass('active');
 		$(this).addClass('active');
@@ -707,7 +709,7 @@ $(document).ready(function (){
 	$('.general-setting').on('click', function (){
 		//设置tab值为1
 		showSaveTips(defaultSaveTips, 2000);
-		setTab(tabName, 1);
+		setParam(tabName, 1);
 		var $this = $(this);
 		$.ajax({
 			type: 'get',
@@ -833,7 +835,8 @@ $(document).ready(function (){
 						<div class="form-group2-area">数据库配置</div>
 						<div class="form-group2 database">
 							<label class="database-dsn-label">DSN</label>
-							<input class="database-dsn" type="text" name="database[dsn]" placeholder="mysql:host=127.0.0.1:3306;dbname=PicUploader" value="${data.database.dsn}"><span></span>
+							<input class="database-dsn" type="text" name="database[dsn]" placeholder="mysql:host=127.0.0.1:3306;dbname=PicUploader" value="${data.database.dsn}"><br>
+							<span>留空自动使用sqlite，如使用mysql/MariaDB，则dbname指定的是数据库名(该库必须在mysql中已存在)，表会自动创建！</span>
 						</div>
 						<div class="form-group2 database">
 							<label class="database-dsn-label">Username</label>
@@ -987,19 +990,14 @@ $(document).ready(function (){
 	
 	//通用设置
 	$('.cloud-storage').on('click', function (){
-		setTab(tabName, 2);
+		setParam(tabName, 1);
 		$(this).find('.sub-left-bar .list .cloud').eq(0).click();
 	});
 	
 	//点击查看历史
 	$('.left-bar .upload-history').on('click', function (){
-		//window.location.search用于获取url中的参数部分，如果原来有参数，那么就用&连接，如果没有，那就用?连接
-		let seperator = window.location.search.length ? '&' : '?';
-		let href = window.location.href + seperator + 'history=1';
-		if(window.location.href.indexOf('history=') > -1){
-			href = window.location.href.replace(/history=(.*?)(&.*?)*/, 'history=1');
-		}
-		window.location.href = href;
+		setParam('history', 1);
+		window.location.reload();
 	});
 	
 	//================== 图片放大 开始 ======================

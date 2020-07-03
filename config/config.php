@@ -114,21 +114,19 @@
 				'directory' => '',
 			],
 			
-			//https://sm.ms, 新版api每人5GB免费空间，收费的截止到2019-08-25还没上线，但已经在开发中，原api在新api完善后，将会下线
-			//也就是说后面使用sm.ms就必须注册了
+			//https://sm.ms
 			'smms' => [
 				'name' => 'sm.ms',
-				// 有两种值可填，v1或v2，使用v1时，token不需要填，使用v2时，token要填(v2可以sm.ms后台看到自己上传的图片)
-				'version' => 'v1',
-				//sm.ms新版api需要token，请注册后，在Dashboard中生成Api token并填写到这里
-				'token' => 'zMY50m***********fxXHly',
+                //请注册后，在Dashboard中生成Api token并填写到这里(不填
+                //也可以，不填就相当于匿名上传，不会出现在后台Dashboard中)
+				'token' => '',
 				//代理地址，如果使用shadowsocks做代理，ip填http://127.0.0.1（或直接填127.0.0.1）即可，
 				//端口从『偏好设置→HTTP→监听端口』找，留空或注释掉表示不使用代理
 				// 'proxy' => 'http://127.0.0.1:1087',
 				'proxy' => '',
 				//无法自定义域名和key名，只能直接用它返回的地址（原因是无账号系统，自己定义的key无法保证全局唯一）
 				//反向代理域名(如果需要的话)
-				'domain' => 'http://img.xiebruce.top',
+				'domain' => '',
 			],
 			
 			//imgur
@@ -140,7 +138,6 @@
 				//代理地址，如果使用shadowsocks做代理，ip填http://127.0.0.1（或直接填127.0.0.1）即可，
 				//比如：'proxy' => 'http://127.0.0.1:1087'，端口从『偏好设置→HTTP→监听端口』找，留空表示不使用代理
 				'proxy' => ''
-				//无法自定义域名和key名，只能直接用它返回的地址（原因是无账号系统，自己定义的key无法保证全局唯一）
 			],
 			
 			//Ucloud
@@ -252,19 +249,7 @@
 				// 'directory' => 'Photos/Travel/Maldives',
 			],
 			
-			//Weibo(上传图片到微博并不会自动发一条微博，请放心使用)
-			// 2019.09.01更新：微博目前不能上传了，原来用的接口已经用不了，有新方法再更新吧
-			// 2019.09.10更新：微博上传恢复，能正常使用
-			// 由于微博的图片域名不稳定(目前知道有https://ws1.sinaimg.cn和https://ws4.sinaimg.cn两个)，所以无法做反代
-			'weibo' => [
-				'name' => '微博',
-				//微博登录用户名(或邮箱)
-				'username' => 'zhangsan@sina.com',
-				//微博登录密码
-				'password' => '*****************',
-			],
-			
-			//使用sftp协议上传到自己的服务器上
+			//使用sftp协议上传到自己的服务器上的指定目录
 			'bwg' => [
 				//这是自定义名称，可以自己改(因为你用的机器也不一定是搬瓦工的，也有可能是阿里云或其他的)
 				'name' => '搬瓦工',
@@ -272,13 +257,16 @@
 				'type' => 'sftp',
 				//ip也可以写域名(反正域名最终也是被解析为ip，都一样)
 				'host' => '服务器ip或域名',
+                //服务器ssh端口(默认22，除非你改了)
+                'port' => '22',
 				'username' => 'ssh用户名',
 				'password' => 'ssh密码',
 				//prefix为前缀，最终上传目录是：prefix+directory，那为什么要分开写呢？因为directory会拼到你的domain后面，而prefix不会
-				//prefix就相当于设置上传的“根目录”
+				//prefix就相当于设置上传的“根目录”，prefix不存在会自动创建，但要求登录的用户有权限在根目录下创建
 				'prefix' => '/home/xiebruce',
-				//如果指定了directory，则directory指定的目录必须存在，否则不会自动创建，会报错
+				//如果不存在则会自动创建，如果指定的prefix已存在，则要求登录的用户具有在prefix目录下创建目录的权限
 				'directory' => '/data',
+                //你的域名，这个必须要有，否则返回的链接会缺少域名
 				'domain' => 'https://img.xiebruce.top',
 			],
 			
@@ -293,6 +281,7 @@
 				//可使用年月日点位符，如 {Y}/{m}/{d}，真正被解析出来的时候会被替换成当前的年月日(如 2019/05/10)
 				//{Y}表示当前的年(注意Y是大写)，{m}表示当前月(有前导0，即1-9月会显示成01-09)，{d}会被替换为当前日期，有前导0(即1-9日会替换为01-09)
 				'directory' => '/images/{Y}/{m}/{d}',
+                //你的域名，这个必须要有，否则返回的链接会缺少域名
 				'domain' => 'https://img.xiebruce.top',
 			],
 			
@@ -391,6 +380,143 @@
 				//自定义域名
 				'domain' => '',
 			],
+            
+            //微软网盘，以前叫Skydrive，后来改名叫OneDrive，不过它都是通过微软的云服务Azure(Azure Active Directory，简称Azure AD)来操作的
+            //而Azure的套餐又是通过Office365来购买的(OneDrive属于Office365下的一个存储服务，Word/Excel/Powerpoint之类的Office软件可直接把文档保存到OneDrive中)
+            'onedrive' => [
+                'name' => 'OneDrive',
+                //tenant终结点域名后面那一段的值，有可能是"organizations"，也有可能是一串类似"8eaef023-2b34-4da1-9baa-8bc8c9d6a490"这样的
+                'tenant' => 'organizations',
+                'clientId' => 'a94be80e-***************51ea3d31a',
+                'clientSecret' => 'Gz1r7?:**************03QkT9Yss',
+                'proxy' => 'http://127.0.0.1:1087',
+                //自定义目录格式：2019/03/31，注意Google自定义目录别太深，否则上传会很慢(因为每一级目录都要请求一次接口查询该级目录是否存在)
+                'directory' => '/{Y}/{m}/{d}',
+            ],
+            
+            //GoogleDrive: https://drive.google.com/drive/my-drive
+            'googledrive' => [
+                'name' => 'GoogleDrive',
+                'clientId' => '810255146704-9esrhfq2r********le.apps.googleusercontent.com',
+                'clientSecret' => 'vq8K9**********1eSkq2o',
+                //使用代理，如：http://127.0.0.1:1087
+                'proxy' => 'http://127.0.0.1:1087',
+                //自定义目录格式：2019/03/31，注意Google自定义目录别太深，否则上传会很慢(因为每一级目录都要请求一次接口查询该级目录是否存在)
+                'directory' => '/{Y}/{m}/{d}',
+                //自定义域名
+                'domain' => '',
+            ],
+            
+            //Azure是微软的云服务：https://azure.microsoft.com/zh-cn/services/devops
+            'azure' => [
+                'name' => 'Azure Git',
+                'appId' => '10065A******************AD2E',
+                'appSecret' => 'eyJ0******************JSUzI1NiIs',
+                'clientSecret' => '******************',
+                //直接使用access_token，如果有这个，前面的appId,appSecert,clientSecert都不需要(但缺点是这个只有30天有效期，到期后只能手动从网页中再次获取)
+                'username' => '*****',
+                //如果没有这个accessToken, 则需要上面appId,appSecert,clientSecert三个参数，这样使用授权的方式，永远不用手动去获取
+                'accessToken' => '3ovomnw****************6lznu2heuq',
+                'organization' => '*****',
+                'project' => '****',
+                'repositoryId' => '*****',
+                //branch默认是master，如果填写其它名字，不存在会自动创建
+                'branch' => 'master',
+                'comment' => 'Upload by PicUploader',
+                'proxy' => '',
+                // 'proxy' => 'http://127.0.0.1:1087',
+            ],
+            
+            //Gitlab: https://gitlab.com 有官方，也可自建
+            'gitlab' => [
+                'name' => 'Gitlab',
+                //你的gitlab域名
+                // 'baseUri' => 'https://www.example.com',
+                'baseUri' => 'https://gitlab.com',
+                //项目id
+                'projectId' => '*****',
+                //repo由: "组名/仓库名"(当项目在组之下时)或"用户名/仓库名"组成，且repo必须与projectId对应
+                'repo' => 'group_name/repo_name',
+                //分支，默认为master(不存在的分支会自动创建)
+                'branch' => 'master',
+                //存储目录，可使用年月日点位符，如 {Y}/{m}/{d}，真正被解析出来的时候会被替换成当前的年月日(如 2019/05/10)
+                //{Y}表示当前的年(注意Y是大写)，{m}表示当前月(有前导0，即1-9月会显示成01-09)，{d}会被替换为当前日期，有前导0(即1-9日会替换为01-09)
+                //例：images/{Y}/{m}/{d}/
+                'directory' => 'images/{Y}/{m}/{d}/',
+                //提交的评论信息，可以不填
+                'message' => 'Upload from PicUploader',
+                //access_token，授权token
+                'access_token' => 'K9f******eC31u',
+                //不填则使用github默认的域名，填了则使用填的域名
+                'domain' => '',
+                //代理地址，如果使用shadowsocks做代理，ip填http://127.0.0.1（或直接填127.0.0.1）即可，
+                //端口从『偏好设置→HTTP→监听端口』找，留空或注释掉表示不使用代理
+                // 'proxy' => 'http://127.0.0.1:1087',
+                // 'directory' => date('Y/m/d/'),
+                //自定义目录格式：Photos/2019/03/31
+                // 'directory' => 'Photos/' . date('Y/m/d/'),
+                //自定义目录格式：Photos/Travel/2019/03/31
+                // 'directory' => 'Photos/Travel/' . date('Y/m/d/'),
+                //自定义目录格式：Photos/Travel/Maldives
+                // 'directory' => 'Photos/Travel/Maldives',
+            ],
+            
+            //Coding.net
+            'codingnet' => [
+                'name' => 'Coding.net',
+                //团队名：登录coding.net后，它的域名是：xxxx.coding.net形式的，其中的"xxxx"就是团队名
+                'group' => '*******',
+                //点击"我的项目"中的某个项目，在"项目概览"的右侧有一个"xxxx / yyyy"，其中"xxxx"是用户名，"yyyy"是项目名(特别注意这个用户名不要填个人设置里的姓名)
+                'username' => '*****',
+                //项目名，其实就相当于github里的仓库名
+                'project' => '******',
+                //分支，默认为master，填写不存在的分支会自动创建
+                'branch' => 'master',
+                //文件夹，表示把图片上传到仓库中的哪个文件夹下，可以为空，可以写多层文件夹，如：images/travel/Turkey
+                'directory' => '',
+                //提交的评论信息，可以不填
+                'message' => 'Upload by PicUploader',
+                //access_token，授权token
+                'access_token' => '35c02*************6638a6',
+                //不填则使用gittee默认的域名，填了则使用填的域名
+                'domain' => '',
+                //代理地址，如果使用shadowsocks做代理，ip填http://127.0.0.1（或直接填127.0.0.1）即可，
+                //端口从『偏好设置→HTTP→监听端口』找，留空或注释掉表示不使用代理
+                // 'proxy' => 'http://127.0.0.1:1087',
+                // 'directory' => date('Y/m/d/'),
+                //自定义目录格式：Photos/2019/03/31
+                // 'directory' => 'Photos/' . date('Y/m/d/'),
+                //自定义目录格式：Photos/Travel/2019/03/31
+                // 'directory' => 'Photos/Travel/' . date('Y/m/d/'),
+                //自定义目录格式：Photos/Travel/Maldives
+                // 'directory' => 'Photos/Travel/Maldives',
+            ],
+            
+            //https://oss.bilnn.com/, 图速云
+            //图片存储(每张图最大4M，每小时最多100张，目前不限制存储空间)，/文件存储(每个文件最大50M，每小时最多100个，目前限制最多1G免费空间)
+            'tusu' => [
+                'name' => '图速云',
+                //请根据你创建服务，填写对应host值：https://oss.bilnn.com/api.html#envs
+                //其中免费的请添加"http://"协议，收费的请添加"https://"协议
+                //如果你在图速云添加了自定义域名，这里按道理是要填写你的自定义域名(但我未测试)
+                'host' => '',
+                //云存储名称(在"图片/内容存储列表->存储详情"里)
+                'bucket' => '',
+                //secretKey(在"图片/内容存储列表->存储详情"里)
+                'secretKey' => 'bf9*******************2108',
+                //代理地址，如：http://127.0.0.1:1087
+                'proxy' => '',
+                //无法自定义域名和key名，只能直接用它返回的地址（原因是无账号系统，自己定义的key无法保证全局唯一）
+                // 'directory' => date('Y/m/d/'),
+                //自定义目录格式：Photos/2019/03/31
+                // 'directory' => 'Photos/' . date('Y/m/d/'),
+                //自定义目录格式：Photos/Travel/2019/03/31
+                // 'directory' => 'Photos/Travel/' . date('Y/m/d/'),
+                //自定义目录格式：Photos/Travel/Maldives
+                // 'directory' => 'Photos/Travel/Maldives',
+                //反向代理域名(如果需要的话)
+                'domain' => '',
+            ],
 		],
 		
 		/*
@@ -401,7 +527,7 @@
 		'fileNameFormat' => '',
 		
 		// 反向代理域名(使用方式请查看：https://www.xiebruce.top/644.html)
-		'reverseProxyDomain' => 'https://img.xiebruce.top',
+		'reverseProxyDomain' => '',
 		
 		// 调整图片大小，以下widthGreaterThan、heightGreaterThan、sizeBiggerThan三个条件，只要有一个满足，图片即会按percentage指定的百分比压缩（只对jpg和png有效，gif暂时无法压缩）
 		'resizeOptions' => [
@@ -430,8 +556,8 @@
 		'videoFormat' => '<video controls name="media" title="{{name}}" width="935"><source src="{{url}}" type="video/mp4"></video>',
 		//音频返回链接格式
 		'audioFormat' => '<audio controls name="media" title="{{name}}" width="400" src="{{url}}" title="{{name}}">',
-		
-		//存储服务器，可选值为：Qiniu/Tencent/Netease/Baidu/Aliyun/Jd/Upyun/Smms/Imgur/Ucloud/Qingcloud/Github/Weibo
+        
+        //存储服务器，可选值为：Qiniu/Tencent/Netease/Baidu/Aliyun/Jd/Upyun/Smms/Imgur/Ucloud/Qingcloud/Nextcloud/Github/Gitee/Local/Cloudinary/Minio/Huawei/S3/Ks3/Chevereto/Dropbox/Onedrive/Googledrive
 		'storageType' => 'Smms',
 		//存储服务器可写多个，表示同时传到云，注意多个服务器的情况下返回的域名将会使用你指定的多个云中的最后一个云的域名，所以这个域名必须填写，并且需要做nginx反向代理，请参考：https://www.xiebruce.top/644.html
 		//有两种写法，一是用逗号隔开，二是直接用数组，如
@@ -524,9 +650,11 @@
 		
 		//数据库是用于存储上传历史记录的，不存储配置
 		'database' => [
-			// 如果使用Sqlite，不需要指定db的具体路径，不需要修改，直接这样就能用
-			'dsn' => 'sqlite:PicUploader.db',
-			//dbname=PicUploader指定的是数据库名，这个数据库必须要自己手动在mysql中创建，而表则会自动创建
+			// 留空默认使用sqlite
+			'dsn' => '',
+            //sqlite格式(如果你不需要自己指定sqlite db文件目录则留空即可)：
+            //'dsn' => 'sqlite:/path/toPicUploader.db',
+			//如果是mysql/mariaDB，则dbname指定的是数据库名，该库在mysql中必须已存在
 			//'dsn' => 'mysql:host=127.0.0.1:3306;dbname=PicUploader',
 			//如果用sqlite，则用户名密码不会被使用，只有mysql/MariaDB才会用到
 			'username' => 'root',

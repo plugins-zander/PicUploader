@@ -22,9 +22,9 @@ class SettingController extends Controller {
 			$settings = json_decode(file_get_contents(APP_PATH.'/config/.config.json'), true);
 		}else{
 			if(is_file(APP_PATH.'/config/config-local.php')){
-				$settings = require_once(APP_PATH.'/config/config-local.php');
+				$settings = require(APP_PATH.'/config/config-local.php');
 			}else if(is_file(APP_PATH.'/config/config.php')){
-				$settings = require_once(APP_PATH.'/config/config.php');
+				$settings = require(APP_PATH.'/config/config.php');
 			}else{
 				throw new \Exception('No config-local.php or config.php found in "config/" directory!');
 			}
@@ -39,7 +39,7 @@ class SettingController extends Controller {
 	 * @param $params
 	 *
 	 * @return false|string
-	 * @throws \Exception
+	 * @throws \GuzzleHttp\Exception\GuzzleException
 	 */
 	public function getStorageParams($params){
 		$key = $params['key'];
@@ -62,12 +62,11 @@ class SettingController extends Controller {
 		];
 		//暂时用false
 		$authorized = false;
-		if(in_array($key, ['onedrive', 'googledrive', 'dropbox'])){
+		if(in_array($key, ['onedrive', 'googledrive', 'dropbox', 'imgur', 'azure', 'flickr'])){
 			$config = $this->getMergeSettings();
 			$constructorParams = ['config' => $config, 'argv' => '', 'uploadServer' => $key];
 			$uploader = 'uploader\\Upload' . ucfirst($key);
 			/** @var UploadOnedrive $upload */
-			/** @var UploadGoogledrive $upload */
 			$upload = new $uploader($constructorParams);
 			$token = $upload->getAccessToken();
 			$authUrl = '';
@@ -92,15 +91,23 @@ class SettingController extends Controller {
 	 *
 	 * @return false|string
 	 */
-	public function setStorageParams ($params){
+	public function setStorageParams($params){
 		$key = $params['key'];
 		unset($_POST['key']);
 		foreach($_POST as &$val){
 			$val = trim($val);
 		}
+		if(in_array($key, ['github', 'gitee', 'gitlab'])){
+			$arr = explode('/', $_POST['repo']);
+			$_POST['repo'] = rtrim($arr[0]) . '/' . ltrim($arr[1]);
+		}
 		!is_dir($this->storagesDir) && mkdir($this->storagesDir, 0777);
 		$jsonFile = $this->storagesDir.'/storage-'.$key.'.json';
-		file_put_contents($jsonFile, json_encode($_POST, JSON_UNESCAPED_SLASHES));
+        $config = json_encode($_POST, JSON_UNESCAPED_SLASHES);
+        //在Win中，如果从"文件→属性→安全→对象名称"中复制路径，会多出一个你看不见的字符"\u202a"，只有变成
+        //json后才看的见它的unicode，这样会导致路径明明存在程序却说不存在的情况，所以要把这个字符在json中去掉
+        $config = str_replace('\u202a', '', $config);
+		file_put_contents($jsonFile, $config);
 		return json_encode([
 			'code' => 0,
 			'msg' => '保存成功！',
@@ -559,20 +566,20 @@ class SettingController extends Controller {
 	 * @return false|string
 	 * @throws \Exception
 	 */
-	public function setRedirectUri($data){
+	public function getAuthUrl($data){
 		$config = $this->getMergeSettings();
-		$key = $data['key'];
+		$key = ucfirst($data['key']);
 		$constructorParams = ['config' => $config, 'argv' => '', 'uploadServer' => $key];
-		$uploader = 'uploader\\Upload' . ucfirst($key);
-		/** @var UploadOnedrive $upload */
-		/** @var UploadGoogledrive $upload */
-		$upload = new $uploader($constructorParams);
-		$authUrl = (new $upload($constructorParams))->getAuthorizationUrl();
-		file_put_contents(APP_PATH.'/.tmp/redirectUri', $data['uri']);
+		$uploader = 'uploader\\Upload' . $key;
+		/** @var UploadOnedrive $uploader */
+		/** @var UploadGoogledrive $uploader */
+		$authUrl = (new $uploader($constructorParams))->getAuthorizationUrl();
+		!session_id() && session_start();
+		$_SESSION[$key]['redirectUri'] = $data['uri'];
 		return json_encode([
 			'code' => 0,
 			'authUrl' => $authUrl,
-			'msg' => '保存重定向地址成功',
+			'msg' => 'Please redirect to authUrl to ask for authorization.',
 		]);
 	}
 }
